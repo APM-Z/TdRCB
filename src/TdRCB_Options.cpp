@@ -1,4 +1,4 @@
-#include "MRCB.h"
+#include "TdRCB.h"
 
 /* system options buffer */
 static prcopt_t prcopt_;
@@ -14,18 +14,18 @@ extern opt_t sysoptz[];
 opt_t sysopts[]={
     {"OBS_PATH",          2,  (void*)&filopt_.obs,          ""     },
     {"NAV_PATH",          2,  (void*)&filopt_.nav,          ""     },
+    {"TEMP_PATH",         2,  (void*)&filopt_.temp,         ""     },
 
     {"OUT_PRO",         2,  (void*)&filopt_.outFile_PRO,    ""     },
     {"OUT_PATH",        2,  (void*)&filopt_.outFile_OUT,     ""     },
     {"OUT_LOG",         2,  (void*)&filopt_.outFile_LOG,     ""     },
 
     {"Ephopt",          0,  (void*)&prcopt_.sateph,     "" },
-    {"FiltMode",        0,  (void*)&prcopt_.soltype,     "" },
     {"Frequency",       0,  (void*)&prcopt_.nf,         "" },
     {"Elmask",          1,  (void*)&elmask_,            "" },
     {"Exclsats",        2,  (void*)exsats_,             ""},
     {"System",          0,  (void*)&prcopt_.navsys,     "" },
-    {"UseBDS2",         0,  (void*)&prcopt_.bds2,       ""},
+    {"UseBDS",          0,  (void*)&prcopt_.usebds,     ""},
     {"DOY",             2,  (void*)&prcopt_.DOY,       ""},
 
 
@@ -233,6 +233,7 @@ extern void resetsysopts(void)
     filopt_.rcvantp[0]='\0';
     filopt_.stapos [0]='\0';
     filopt_.solstat[0]='\0';
+    filopt_.temp[0]='\0';
     for (i=0;i<2;i++) antpostype_[i]=0;
     elmask_=15.0;
     for (i=0;i<2;i++) for (j=0;j<3;j++) {

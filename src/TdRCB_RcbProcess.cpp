@@ -1,5 +1,5 @@
-#include "MRCB.h"
-#include "MRCB_SolBody.h"
+#include "TdRCB.h"
+#include "TdRCB_SolBody.h"
 #ifndef min
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #endif
@@ -16,11 +16,6 @@ static double varerr(double el,int type,int sys,const prcopt_t *opt,int frq)
         case SYS_CMP: fact*=EFACT_CMP; break;
 		case SYS_QZS: fact*=EFACT_QZS; break;
     }
-	if (sys == SYS_GPS || sys == SYS_QZS) {
-		if (frq == 2) {
-			fact *= EFACT_GPS_L5;
-		}
-	}
 
     return SQR(fact * opt->err[1] /sinel);
 }
@@ -36,7 +31,7 @@ static void initx(rcb_t* rcb, double xi, double var, int i)
 	}
 }
 /* temporal update of frequency-independent parameter */
-static void uprex_mrcb(rcb_t* rcb, const obsd_t* obs, int n, unsigned char* F) {
+static void uprex_tdrcb(rcb_t* rcb, const obsd_t* obs, int n, unsigned char* F) {
 	int i, j, sat;
 	prcopt_t* opt = &rcb->opt;
 	
@@ -50,7 +45,7 @@ static void uprex_mrcb(rcb_t* rcb, const obsd_t* obs, int n, unsigned char* F) {
 	}
 }
 /* temporal update of rcb */
-static void urcb_mrcb(rcb_t* rcb, const obsd_t* obs, int n, unsigned char* F)
+static void urcb_tdrcb(rcb_t* rcb, const obsd_t* obs, int n, unsigned char* F)
 {
 	int i, j, f;
 	prcopt_t* opt = &rcb->opt;
@@ -63,7 +58,7 @@ static void urcb_mrcb(rcb_t* rcb, const obsd_t* obs, int n, unsigned char* F)
 	}
 }
 /* temporal update of scb */
-static void uscb_mrcb(rcb_t* rcb, const obsd_t* obs, int n, unsigned char* F)
+static void uscb_tdrcb(rcb_t* rcb, const obsd_t* obs, int n, unsigned char* F)
 {
 	int i, j, f, sat;
 	prcopt_t* opt = &rcb->opt;
@@ -90,19 +85,28 @@ static void uscb_mrcb(rcb_t* rcb, const obsd_t* obs, int n, unsigned char* F)
 	}
 }
 /* temporal update of GLONASS IFB */
-static void uIFB_mrcb(rcb_t* rcb, const obsd_t* obs, int n, unsigned char* F)
+static void uIFB_tdrcb(rcb_t* rcb, const obsd_t* obs, int n, unsigned char* F)
 {
-	int j, f;
+	int i, j, f, sat;
 	prcopt_t* opt = &rcb->opt;
 
-	for (f = 0; f < opt->nf; f++) {
-		j = IFB(&rcb->opt, f);
-		initx(rcb, 0, 0, j);
-		F[j] = 0;
+	if (!(opt->navsys & SYS_GLO)) return;
+
+	for (i = 0; i < n && i < MAXOBS; i++) {
+		if ((sat = obs[i].sat) <= 0) continue;
+		if (satsys(sat, NULL) != SYS_GLO) continue;
+
+		for (f = 0; f < opt->nf; f++) {
+			j = IFB(opt, f);
+			initx(rcb, 0, 0, j);
+			F[j] = 0;
+		}
+		return; /* IFB is receiver-level: init once when any GLO sat exists */
 	}
 }
+
 /* temporal update of ion parameters */
-static void udion_mrcb(rcb_t* rcb, const obsd_t* obs, int n, unsigned char* F)
+static void udion_tdrcb(rcb_t* rcb, const obsd_t* obs, int n, unsigned char* F)
 {
 	int i, j, sat;
 	for (i = 0; i < n && i < MAXOBS; i++) {
@@ -120,7 +124,7 @@ static void udion_mrcb(rcb_t* rcb, const obsd_t* obs, int n, unsigned char* F)
 }
 
 /* temporal update of phase biases */
-static void udamb_mrcb(rcb_t *rcb,const obsd_t *obs,int n,unsigned char *F)
+static void udamb_tdrcb(rcb_t *rcb,const obsd_t *obs,int n,unsigned char *F)
 {
     int i,j,f,sat;
 	prcopt_t* opt = &rcb->opt;
@@ -154,19 +158,19 @@ static void udstate_rcb_sd(rcb_t*rcb,const obsd_t*obs,int n,unsigned char *F)
 	/* Initial */
 	for (i = 0; i < rcb->nx; ++i) F[i] = 0;
 	/*temporal update of P*/
-	uprex_mrcb(rcb, obs, n, F);
+	uprex_tdrcb(rcb, obs, n, F);
 	/*temporal update of ionoopt parameters*/
 	if (rcb->opt.ionoopt == IONOOPT_EST) {
-		udion_mrcb(rcb, obs, n, F);
+		udion_tdrcb(rcb, obs, n, F);
 	}
 	/*temporal update of rcb*/
-	urcb_mrcb(rcb, obs, n, F);
+	urcb_tdrcb(rcb, obs, n, F);
 	/*temporal update of scb*/
-	if (opt->nf >= 3) uscb_mrcb(rcb, obs, n, F);
+	if (opt->nf >= 3) uscb_tdrcb(rcb, obs, n, F);
 	/*temporal update of ifb*/
-	uIFB_mrcb(rcb, obs, n, F);
+	uIFB_tdrcb(rcb, obs, n, F);
 	/*temporal update of ambiguity*/
-	udamb_mrcb(rcb, obs, n, F);
+	udamb_tdrcb(rcb, obs, n, F);
 }
 
 /* satellite antenna phase center variation */
@@ -399,7 +403,7 @@ static int LSFfilt(rcb_t*rcb,prcopt_t *opt,double *Xp,double *Pp,const double *H
 	               const double *v,const double *R,const int *ih,int *ifrq,const unsigned char *F,
 	               double *TqLOM,int n,int m,int *ix,int*redundancy)
 {
-	int i,j,M,N,im,p,nx,np,nc,red;
+	int i,j,M,N,im,p,nx,np,nc,red,t;
 	int *ip,*C,T=m;
 	unsigned char stat=1;
 	double d,LOM,kLOM,tqlom,TQLOM=1,maxwt;
@@ -407,7 +411,6 @@ static int LSFfilt(rcb_t*rcb,prcopt_t *opt,double *Xp,double *Pp,const double *H
 	double *A2,*Y2,*R2,*iR2,*N2,*r2;
 	double *Am,*Ym,*Rm,*iRm,*X,*S,*V;
 	double *Qv,*Qc,*Pk,*W,*wt;
-	int exc_sat;
 	/* obtain valid number of parameters */
 	ip=imat(n,1);
 	for (i=nx=np=0;i<n;++i) {
@@ -553,87 +556,110 @@ static int LSFfilt(rcb_t*rcb,prcopt_t *opt,double *Xp,double *Pp,const double *H
 		C =imat(m,1); memset(C,0,sizeof(int)*m);
 		/* QC */
 		for (p=1,nc=0;p<min(red-1,m)&&fabs(tqlom)>TQLOM;++p) {
-			memset(Qv,0,sizeof(double)*M*M);
-            memset(Pk,0,sizeof(double)*M*M);
-            memset(Qc,0,sizeof(double)*M*M);
-            memset(wt,0,sizeof(double)*m);
-			N=nx+nc;
+			memset(Qv, 0, sizeof(double) * M * M);
+			memset(Pk, 0, sizeof(double) * M * M);
+			memset(Qc, 0, sizeof(double) * M * M);
+			memset(wt, 0, sizeof(double) * m);
+			N = nx + nc;
 			/* Qv = Rm - Am*S*Am' */
-		    W=zeros(M,N);
-		    matmul("TT",M,N,N,1.0,Am,S ,0.0,W);   /*      Am*S     */
-		    matcpy(Qv,Rm,M,M);
-		    matmul("NN",M,M,N,-1.0,W,Am,1.0,Qv); /* Rm - Am*S*Am' */
-		    free(W);
+			W = zeros(M, N);
+			matmul("TT", M, N, N, 1.0, Am, S, 0.0, W);   /*      Am*S     */
+			matcpy(Qv, Rm, M, M);
+			matmul("NN", M, M, N, -1.0, W, Am, 1.0, Qv); /* Rm - Am*S*Am' */
+			free(W);
 			/* Pk = iRm*Qv*iRm */
-		    matmul("NN",M,M,M,1.0,iRm,Qv,0.0,Qc); /* iRm*Qv */
-		    matmul("NN",M,M,M,1.0,Qc,iRm,0.0,Pk); /* iRm*Qv*iRm */
+			matmul("NN", M, M, M, 1.0, iRm, Qv, 0.0, Qc); /* iRm*Qv */
+			matmul("NN", M, M, M, 1.0, Qc, iRm, 0.0, Pk); /* iRm*Qv*iRm */
 			/* DIA: detect */
-			im=-1; maxwt=0;
-			for (i=0;i<T;++i) {
-				if (C[i] == 1) continue; 
-			    if ((d=Pk[(i+np)*M+(i+np)])<1e-4){ 
-					wt[i]=0;
+			im = -1; maxwt = 0;
+			/* loop over actual observations for DIA */
+			for (i = 0; i < T; ++i) {
+				if (C[i] == 1) continue; /* already flagged */
+				if ((d = Pk[(i + np) * M + (i + np)]) < 0.001) { /* skip small variance */
+					wt[i] = 0;
 					continue;
 				}
-			    if (ih[i]>0) { /* phase */
-				    for (j=0,wt[i]=0;j<M;++j) wt[i]+=iRm[(i+np)*M+j]*V[j];
-				    wt[i]/=sqrt(d);
-				    if (fabs(wt[i])>maxwt) {
-						maxwt=fabs(wt[i]); 
-						im=i;
+				if (ih[i] > 0) { /* phase */
+					//if(!fi[i]) continue;
+					for (j = 0, wt[i] = 0; j < M; ++j) wt[i] += iRm[(i + np) * M + j] * V[j]; /* w-test */
+					wt[i] /= sqrt(d);
+					if (fabs(wt[i]) > maxwt) {
+						maxwt = fabs(wt[i]);
+						im = i;
 					}
-			    }
+				}
 				else {         /* code */
-					wt[i]=0;
+					wt[i] = 0;
 				}
-		    }
-			if(im==-1||maxwt<5.0) break;
-			/* DIA identify */
-			if(ih[im]>0) { /* phase */
-		        exc_sat=ih[im]%MAXSAT;
-				/* cycle slip */
-				rcb->ssat[exc_sat-1].slip[ifrq[im]]=1; 
-				C[im]=1;
 			}
-			else {         /* code */
-				C[im]=1;
+			if (im == -1 || maxwt < 5.0) break;
+			/* DIA identify: flag all obs on the same satellite */
+			t = 0;
+			if (ih[im] > 0) { /* phase */
+				rcb->ssat[ih[im] - 1].slip[ifrq[im]] |= LLI_SLIP;
+				for (i = 0; i < T; ++i) if (ih[i] == ih[im]) { ++t; C[i] = 1; }
 			}
-			nc+=1;
+			else { /* code */
+				for (i = 0; i < T; ++i) if (ih[i] == ih[im]) { ++t; C[i] = 1; }
+			}
+			nc += t;
 			/* DIA: adaptation */
-			N=nx+nc; red=M-N;
-			if(red<1){
+			N = nx + nc; red = M - N;
+			if (red < 1) {
 				free(Rm); free(iRm); free(Qv); free(Pk); free(Qc); free(wt); free(C);
 				free(Am); free(Ym);  free(X);  free(S);  free(V);
 				return -1;
 			}
-			W=zeros(M,N);
-			for (i=0;i<M;++i) {
-				for (j = 0; j < N - 1; ++j) {
-					W[i * N + j] = Am[i * (N - 1) + j];
+			W = zeros(M, N);
+			for (i = 0; i < M; ++i) {
+				for (j = 0; j < N - t; ++j) W[i * N + j] = Am[i * (N - t) + j];
+			}
+			for (i = j = 0; i < t; ++i) {
+				for (; j < T; ++j) if (ih[j] == ih[im]) {
+					W[(j + np) * N + (N - t + i)] = 1.0;
+					++j;
+					break;
 				}
 			}
-			W[(im+np)*N+(N-1)]=1;
-			free(Am); 
-			Am=zeros(M,N);
-			matcpy(Am,W,M,N);
-			free(W);		
+			free(Am);
+			Am = zeros(M, N);
+			matcpy(Am, W, M, N);
+			free(W);
+
 			/*lsq*/
-			free(X); X=zeros(N,1);
-			free(S); S=zeros(N,N);
-			memset(V,0,sizeof(double)*M);
-			if(lsq_(Am,iRm,Ym,N,M,X,S,V)==-1){
+			free(X); X = zeros(N, 1);
+			free(S); S = zeros(N, N);
+			memset(V, 0, sizeof(double) * M);
+			if (lsq_(Am, iRm, Ym, N, M, X, S, V) == -1) {
+				int ns_sys[5] = { 0 }, nsat = 0, used[MAXSAT] = { 0 };
+				int sat, sys, sn;
+				char tstr[64];
+				/* remaining satellites after DIA rejection (unflagged phase) */
+				for (i = 0; i < T; ++i) {
+					if (C[i]) continue;
+					if ((sat = ih[i]) <= 0 || sat > MAXSAT || used[sat - 1]) continue;
+					used[sat - 1] = 1;
+					sys = satsys(sat, NULL);
+					sn = sys2num(sys) - 1;
+					if (sn >= 0 && sn < 5) ++ns_sys[sn];
+					++nsat;
+				}
+				time2str(rcb->sol.time, tstr, 0);
+				printf("++++++++++++ Lsq failure ++++++++++++\n");
+				printf("%s After DIA, num of sat, GPS:%d GLO:%d GAL:%d QZSS:%d BDS:%d total:%d\n",
+					tstr, ns_sys[0], ns_sys[1], ns_sys[2], ns_sys[3], ns_sys[4], nsat);
 				free(Rm); free(iRm); free(Qv); free(Pk); free(Qc); free(wt); free(C);
 				free(Am); free(Ym);  free(X);  free(S);  free(V);
 				return -1;
 			}
-			/*computation of Local Overall Model (LOM) test*/	
-			W=zeros(1,M);
-			matmul("NT",1,M,M,1.0,V,iRm,0.0,W);     /* V'*P   */
-			matmul("NN",1,1,M,1.0,W,V  ,0.0,&LOM);  /* V'*P*V */
+			/*computation of Local Overall Model (LOM) test*/
+			W = zeros(1, M);
+			matmul("NT", 1, M, M, 1.0, V, iRm, 0.0, W);     /* V'*P   */
+			matmul("NN", 1, 1, M, 1.0, W, V, 0.0, &LOM);  /* V'*P*V */
 			free(W);
-			LOM=LOM/red; 
-			kLOM=diacri[red-1]; 
-			*TqLOM=tqlom=LOM/kLOM;
+			LOM = LOM / red;
+			kLOM = diacri[red - 1];
+			*TqLOM = tqlom = LOM / kLOM;
 		}
 
 		for(i=0;i<n;++i){
@@ -733,15 +759,6 @@ extern int RCB(FILE**fp,rcb_t* rcb,const obsd_t *obs, int n,const nav_t *nav,rsc
 	}
 	else
 	{
-		if (rcb->sol.redundancy < 0) {
-			printf("++++++++++++ LSF filter failure,redundancy=%d ++++++++++++\n", rcb->sol.redundancy);
-			printf("Possible poor data quality. The num of sat, GPS:%d GLO:%d GAL:%d QZSS:%d BDS:%d  Total:%d\n",
-				 rcb->sol.sys_ns[0], rcb->sol.sys_ns[1], rcb->sol.sys_ns[2], rcb->sol.sys_ns[3], rcb->sol.sys_ns[4], rcb->sol.ns);
-
-		}
-		else {
-			printf("++++++++++++ LSF filter failure,redundancy ++++++++++++\n");
-		}
 		free(Xp); free(Pp); free(v); free(H); free(R); free(ih); free(ifrq); free(ix);
 		return 0;
 	}

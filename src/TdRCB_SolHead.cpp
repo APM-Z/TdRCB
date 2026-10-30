@@ -1,4 +1,4 @@
-#include "MRCB.h"
+#include "TdRCB.h"
 /* solution option to field separator */
 static const char *opt2sep(const solopt_t *opt)
 {
@@ -10,7 +10,6 @@ static const char *opt2sep(const solopt_t *opt)
 static int outprcopts(unsigned char* buff, const prcopt_t* opt)
 {
     const int sys[] = { SYS_GPS,SYS_GLO,SYS_GAL,SYS_QZS,SYS_CMP,SYS_IRN,SYS_SBS,0 };
-    const char* s3[] = { "forward","backward","combined" };
     const char* s4[] = { "off","broadcast","sbas","iono-free","estimation","" };
     const char* s6[] = { "broadcast","precise","" };
     const char* s7[] = { "GPS","GLONASS","GALILEO","QZSS","BDS","IRNSS","SBAS","" };
@@ -20,7 +19,6 @@ static int outprcopts(unsigned char* buff, const prcopt_t* opt)
     p += sprintf(p, "%s Ephemeris   : %s\n", COMMENTH, s6[opt->sateph]);
     p += sprintf(p, "%s Elev mask   : %.1f deg\n", COMMENTH, opt->elmin * R2D);
     p += sprintf(p, "%s Freq number : %d\n", COMMENTH, opt->nf);
-    p += sprintf(p, "%s Sol  Type   : %s\n", COMMENTH, s3[opt->soltype]);
     p += sprintf(p, "%s Ionos opt   : %s\n", COMMENTH, s4[opt->ionoopt]);
     p += sprintf(p, "%s Navi sys    :", COMMENTH);
     for (i = 0; sys[i]; i++) {
@@ -36,19 +34,18 @@ static int outsolheads(unsigned char* buff, const solopt_t* opt, const prcopt_t*
     char* p = (char*)buff;
     p += sprintf(p, "#---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
     p += sprintf(p, "#%15s%s%20s%s%14s%s%14s%s%4s%s%6s", "Time(GPST)", sep, "x-ecef(m)", sep, "y-ecef(m)", sep, "z-ecef(m)", sep, "ns", sep, "GDOP");
-    if (popt->bds2 == 0) {
-        p += sprintf(p, "%s%s%10s%s%8s%s%8s%s", sep, sep, "G_P1(m)", sep, "G_P2(m)", sep, "G_P5(m)", sep);
-        p += sprintf(p, "%s%9s%s%8s%s", sep, "R_R1(m)", sep, "R_R2(m)", sep);
-        p += sprintf(p, "%s%10s%s%8s%s%8s%s%8s%s%8s%s", sep, "GAL_E1(m)", sep, "GAL_E5a(m)", sep, "GAL_E5b(m)", sep, "GAL_E6(m)", sep, "GAL_E5(m)", sep);
-        p += sprintf(p, "%s%10s%s%8s%s%8s%s", sep, "J_P1(m)", sep, "J_P2(m)", sep, "J_P5(m)", sep);
+    p += sprintf(p, "%s%s%10s%s%8s%s%8s%s", sep, sep, "G_P1(m)", sep, "G_P2(m)", sep, "G_P5(m)", sep);
+    p += sprintf(p, "%s%9s%s%8s%s", sep, "R_R1(m)", sep, "R_R2(m)", sep);
+    p += sprintf(p, "%s%10s%s%8s%s%8s%s%8s%s%8s%s", sep, "GAL_E1(m)", sep, "GAL_E5a(m)", sep, "GAL_E5b(m)", sep, "GAL_E6(m)", sep, "GAL_E5(m)", sep);
+    p += sprintf(p, "%s%10s%s%8s%s%8s%s", sep, "J_P1(m)", sep, "J_P2(m)", sep, "J_P5(m)", sep);
+    if (popt->usebds == 0) {
         p += sprintf(p, "%s%10s%s%8s%s%8s%s%8s%s%8s", sep, "BDS3_B1I(m)", sep, "BDS3_B3I(m)", sep, "BDS3_B2b(m)", sep, "BDS3_B1C(m)", sep, "BDS3_B2a(m)");
     }
-    else if (popt->bds2 == 1) {
-        p += sprintf(p, "%s%s%10s%s%8s%s%8s%s", sep, sep, "G_P1(m)", sep, "G_P2(m)", sep, "G_P5(m)", sep);
-        p += sprintf(p, "%s%10s%s%8s%s", sep, "R_R1(m)", sep, "R_R2(m)", sep);
-        p += sprintf(p, "%s%10s%s%8s%s%8s%s%8s%s%8s%s", sep, "GAL_E1(m)", sep, "GAL_E5a(m)", sep, "GAL_E5b(m)", sep, "GAL_E6(m)", sep, "GAL_E5(m)", sep);
-        p += sprintf(p, "%s%10s%s%8s%s%8s%s", sep, "J_P1(m)", sep, "J_P2(m)", sep, "J_P5(m)", sep);
+    else if (popt->usebds == 1) {
         p += sprintf(p, "%s%10s%s%8s%s%8s", sep, "BDS2_B1I(m)", sep, "BDS2_B3I(m)", sep, "BDS2_B2b(m)");
+    }
+    else if (popt->usebds == 2) { /* shared B1I/B3I for BDS-2+BDS-3 */
+        p += sprintf(p, "%s%10s%s%8s%s%8s%s%8s%s%8s", sep, "BDS_B1I(m)", sep, "BDS_B3I(m)", sep, "BDS3_B2b(m)", sep, "BDS3_B1C(m)", sep, "BDS3_B2a(m)");
     }
     p += sprintf(p, "\n");
     p += sprintf(p, "#---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
@@ -115,5 +112,31 @@ int creatFile(FILE** fp, const filopt_t* fopt, const prcopt_t* popt, const solop
         printf("File creat error,please check the out path!\n");
         return 0;
     }
+}
+
+/* temperature-RCB fit file header */
+static void outtempfithead(FILE* fp, const prcopt_t* popt)
+{
+    char buff[1024], *p = buff;
+    outprcopt(fp, popt);
+    p += sprintf(p, "%s Temperature-RCB quadratic fit\n", COMMENTH);
+    p += sprintf(p, "%s Model   : RCB(m) = a * T(degC)^2 + b * T(degC) + c\n", COMMENTH);
+    p += sprintf(p, "%s Epochs  : float RCB solutions that have a temperature\n", COMMENTH);
+    p += sprintf(p, "%s\n", COMMENTH);
+    p += sprintf(p, "System       Band           N         a(m/degC^2)           b(m/degC)                 c(m)        R2  Equation\n");
+    fwrite(buff, (int)(p - buff), 1, fp);
+}
+
+/* create temperature-RCB fit file */
+int creatTempFit(FILE** fp, const filopt_t* fopt, const prcopt_t* popt, char* fitfilename)
+{
+    char outfile[1024];
+    snprintf(outfile, 1024, "%s%s.%s", fopt->outFile_OUT, fitfilename, "tfit");
+    if (!(*fp = openfile(outfile))) {
+        printf("File creat error,please check the out path!\n");
+        return 0;
+    }
+    outtempfithead(*fp, popt);
+    return 1;
 }
 

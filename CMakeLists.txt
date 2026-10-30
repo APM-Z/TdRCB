@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(MRCB LANGUAGES CXX)
+project(TdRCB LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,12 +11,12 @@ endif()
 include_directories(include)
 
 file(GLOB SOURCES "src/*.cpp")
-add_executable(MRCB ${SOURCES})
+add_executable(TdRCB ${SOURCES})
 
 if(UNIX AND NOT MSVC)
-    target_link_libraries(MRCB m)
+    target_link_libraries(TdRCB m)
 endif()
 
 if(WIN32)
-    target_compile_definitions(MRCB PRIVATE _WIN32)
+    target_compile_definitions(TdRCB PRIVATE _WIN32)
 endif()

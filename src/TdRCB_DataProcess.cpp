@@ -1,4 +1,4 @@
-#include "MRCB.h"
+#include "TdRCB.h"
 #define THRES_MW_JUMP 10.0
 
 /* initialize state and covariance */
@@ -59,7 +59,7 @@ static void detslp_gf(const obsd_t* obs, int n, const nav_t* nav, int nf, rcb_t*
 	}
 }
 /* detect slip by Melbourne-Wubbena linear combination jump */
-static void detslp_mw(const obsd_t *obs,int n,const nav_t *nav, int nf,rcb_t* rcb)
+static void detslp_mw(const obsd_t* obs, int n, const nav_t* nav, int nf, rcb_t* rcb)
 {
 	double w0, w1;
 	int i, j;
@@ -73,6 +73,49 @@ static void detslp_mw(const obsd_t *obs,int n,const nav_t *nav, int nf,rcb_t* rc
 			for (j = 0; j < rcb->opt.nf; j++) rcb->ssat[obs[i].sat - 1].slip[j] |= 1;
 		}
 	}
+}
+
+/* mark valid satellites by elevation at approximate position */
+static void mark_vsat(const obsd_t *obs, int n, const prcopt_t *opt,
+                      rscs_t *rscs, const double *rr, ssat_t *ssat)
+{
+	double pos[3], e[3];
+	int i, sat, sys, prn;
+
+	for (i = 0; i < MAXSAT; i++) ssat[i].vs = 0;
+	ecef2pos(rr, pos);
+	for (i = 0; i < n && i < MAXOBS; i++) {
+		sat = obs[i].sat;
+		if (sat <= 0) continue;
+		if (!(sys = satsys(sat, &prn))) continue;
+		if (satexclude(sat, rscs[i].var, rscs[i].svh, opt)) continue;
+		if (sys == SYS_CMP) {
+			if (prn == 31 || prn > 46) continue;
+			if (opt->usebds == 1 && prn > 18) continue;      /* BDS-2 only */
+			if (opt->usebds == 0 && prn <= 18) continue;     /* BDS-3 only */
+			/* usebds==2: BDS-2 + BDS-3 */
+		}
+		if (obs[i].P[0] == 0.0) continue;
+		if (geodist(rscs[i].rs, rr, e) <= 0.0) continue;
+		if (satazel(pos, e, rscs[i].azel) < opt->elmin) continue;
+		ssat[sat - 1].vs = 1;
+	}
+}
+
+/* use RINEX OBS header APPROX POSITION XYZ as the static reference */
+static int setpos_rinex(const sta_t *sta, sol_t *sol, const obsd_t *obs, int n,
+                        const prcopt_t *opt, rscs_t *rscs, ssat_t *ssat)
+{
+	int i, ns = 0;
+
+	if (!sta || norm(sta->pos, 3) <= 0.0) return 0;
+
+	for (i = 0; i < 3; i++) sol->rr[i] = sta->pos[i];
+	sol->stat = SOLQ_NONE;
+	mark_vsat(obs, n, opt, rscs, sol->rr, ssat);
+
+	for (i = 0; i < MAXSAT; i++) if (ssat[i].vs) ns++;
+	return ns >= 2;
 }
 
 /* cal rcb */
@@ -99,10 +142,12 @@ extern int calrcb(FILE**fp,rcb_t*rcb,obsd_t*obs,int n, nav_t *nav,sta_t*sta, con
 		printf("station: stellite clock lack!\n");
 		return 0;
 	}
-	/* rover position by single point positioning */
-	if (!pntpos(odata, n, nav, &rcb->opt, &rcb->sol, rscs, rcb->ssat, msg)) {
+	/* static reference: RINEX APPROX POSITION XYZ; else single-point positioning */
+	if (setpos_rinex(sta, &rcb->sol, odata, n, opt, rscs, rcb->ssat)) {
+		/* sta->pos from OBS header */
+	}
+	else if (!pntpos(odata, n, nav, &rcb->opt, &rcb->sol, rscs, rcb->ssat, msg)) {
 		printf("SPP point pos error:%s, Possible poor data quality. \n", msg);
-		printf("You can try using a multi-system solution to increase the number of satellites and resolve this issue.");
 		return 0;
 	}
 	/*cycle slip detection*/

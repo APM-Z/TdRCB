@@ -1,7 +1,11 @@
-*.o
-*.obj
-*.exe
-build/
-.DS_Store
-*.swp
-*~
+*/
+!conf/
+!include/
+!script/
+!src/
+!Testdata/
+!Testdata/day-by-day processing/
+!Testdata/continuous processing/
+!Testdata/continuous processing/nav/
+!Testdata/continuous processing/obs/
+result/

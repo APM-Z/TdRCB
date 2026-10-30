@@ -1,4 +1,4 @@
-#include "MRCB.h"
+#include "TdRCB.h"
 /* constants */
 #define NX_SPP      (3+NSYS)   /* # of estimated parameters */
 #define ERR_ION     5.0            /* ionospheric delay std (m) */
@@ -70,11 +70,11 @@ static int rescode(int iter,const prcopt_t *opt,const obsd_t *obs,int n, const n
 		if(sat<=0) continue;
         if (!(sys = satsys(sat, &prn))) continue;
         if (satexclude(sat, rscs[i].var, rscs[i].svh, opt)) continue;
-        if (opt->bds2 == 1) {
-            if (sys == SYS_CMP && (prn > 18 || prn > 46 || prn == 31)) continue;
-        }
-        else if (opt->bds2 == 0) {
-            if (sys == SYS_CMP && (prn <= 18 || prn > 46 || prn == 31)) continue;
+        if (sys == SYS_CMP) {
+            if (prn == 31 || prn > 46) continue;
+            if (opt->usebds == 1 && prn > 18) continue;      /* BDS-2 only */
+            if (opt->usebds == 0 && prn <= 18) continue;     /* BDS-3 only */
+            /* usebds==2: BDS-2 + BDS-3 */
         }
         if (exc[i]) continue;
         /*compute*/

@@ -1,4 +1,4 @@
-#include "MRCB.h"
+#include "TdRCB.h"
 #include <errno.h>   
 #include <string.h>  
 /* constants -----------------------------------------------------------------*/
@@ -278,17 +278,16 @@ const prcopt_t prcopt_default={      /* defaults processing options */
     {100.0,100.0},                   /* eratio[] */
     {100.0,0.003,0.003,0.0,1},       /* err[] */
     {30.0,0.03,0.3},                 /* std[] */
-    {0.0,10,1E-4,1E+2,1E+2,0.2},     /* [prn[]] process-noise std [0]bias,[1]iono [2]trop [3]acch [4]accv [5] pos */
+    {0.0,1,1E-4,1E+2,1E+2,0.1},     /* [prn[]] process-noise std [0]bias,[1]iono [2]trop [3]acch [4]accv [5] pos */
     5E-12,                           /* sclkstab */
     0.05,                            /* thresslip */
     30.0,30.0,                       /* maxtdif,maxinno */
     {{0}},                           /* [antdel] antenna delta {e,n,u} */
     {{0,0}},                         /* [snrmask] */
     2,                               /* [nf] */
-    0,                               /*0:forward*/
     0,                               /*0:single process 1:continue process*/
     "",                              /* Station Name */
-    0,                               /* 0:use bds3 1:use bds2 */
+    0,                               /* UseBDS: 0 BDS-3, 1 BDS-2, 2 BDS-2+BDS-3 */
     ""                               /* DOY date */
 };
 const solopt_t solopt_default={ /* defaults solution output options */
@@ -1826,11 +1825,11 @@ static int readantex(const char *file,pcvs_t *pcvs, prcopt_t* popt)
             for (i=0;i<7;i++) if (freqs[i]==f) break;
             if (i<7) freq=i+1;
             sys=satsys(pcv.sat,NULL);
-            if (popt->bds2 == 1) {
+            if (popt->usebds == 1) {
                 if (sys == SYS_CMP) {
                     if (freq == 2) freq = 1; /* B1-2      */
-                    else if (freq == 4) freq = 2; /* B3        */
-                    else if (freq == 5) freq = 3; /* B2b(BDS-2)*/
+                    else if (freq == 4) freq = 3; /* B3        */
+                    else if (freq == 5) freq = 2; /* B2b(BDS-2)*/
                     else if (freq == 3) freq = 5; /* B2 (BDS-3)*/
                     else if (freq == 6) freq = 6; /* B2a(BDS-3)*/
                     else if (freq == 7) freq = 7; /* B2b(BDS-3)*/
@@ -1838,7 +1837,7 @@ static int readantex(const char *file,pcvs_t *pcvs, prcopt_t* popt)
                     //else if (freq==1) freq=1; /* B1-2    ver==3.02*/
                 }
             }
-            else {
+            else { /* UseBDS 0/2: f1=B1I, f2=B3I */
                 if (sys == SYS_CMP) {
                     if (freq == 2) freq = 1; /* B1-2      */
                     else if (freq == 4) freq = 2; /* B3        */
@@ -2244,7 +2243,7 @@ static double set_wavelen(int sys, const prcopt_t* popt,int frq, const nav_t* na
     const double freq_glo[] = { FREQ1_GLO,FREQ2_GLO };
     const double dfrq_glo[] = { DFRQ1_GLO,DFRQ2_GLO };
 
-    if (popt->bds2 == 0 || popt->bds2 == 2) {
+    if (popt->usebds == 0 || popt->usebds == 2) { /* f1=B1I, f2=B3I */
         if (sys == SYS_GLO) {
             if (0 <= frq && frq <= 1) { /* L1,L2 */
                 for (i = 0; i < nav->ng; i++) {
@@ -2257,10 +2256,10 @@ static double set_wavelen(int sys, const prcopt_t* popt,int frq, const nav_t* na
             }
         }
         if (sys == SYS_CMP) {
-            if (frq == 0) return CLIGHT / FREQ1_CMP;      /* B1-2    1.561098E9   */
-            else if (frq == 1) return CLIGHT / FREQ3_CMP; /* B3      1.26852E9 */
+            if (frq == 0) return CLIGHT / FREQ1_CMP;      /* B1I/B1-2 1.561098E9 */
+            else if (frq == 1) return CLIGHT / FREQ3_CMP; /* B3I     1.26852E9 */
             else if (frq == 2) return CLIGHT / FREQ2_CMP; /* B2b(BDS-3) 1.20714E9 */
-            else if (frq == 3) return CLIGHT / FREQ1;     /* B1 (BDS-3) 1.57542E9 */
+            else if (frq == 3) return CLIGHT / FREQ1;     /* B1C (BDS-3) 1.57542E9 */
             else if (frq == 4) return CLIGHT / FREQ5;     /* B2a(BDS-3) 1.17645E9 */
             else if (frq == 5) return CLIGHT / FREQ2_CMP; /* B2b(BDS-2) 1.20714E9 */
         }
@@ -2278,7 +2277,7 @@ static double set_wavelen(int sys, const prcopt_t* popt,int frq, const nav_t* na
             else if (frq == 3) return CLIGHT / FREQ6; /* L6/LEX 1.27875E9 */
         }
     }
-    else if (popt->bds2 == 1) {
+    else if (popt->usebds == 1) {
         if (sys == SYS_GLO) {
             if (0 <= frq && frq <= 1) { /* L1,L2 */
                 for (i = 0; i < nav->ng; i++) {
@@ -2292,8 +2291,8 @@ static double set_wavelen(int sys, const prcopt_t* popt,int frq, const nav_t* na
         }
         if (sys == SYS_CMP) {
             if (frq == 0) return CLIGHT / FREQ1_CMP;      /* B1-2    1.561098E9   */
-            else if (frq == 1) return CLIGHT / FREQ3_CMP; /* B3      1.26852E9 */
-            else if (frq == 2) return CLIGHT / FREQ2_CMP; /* B2b(BDS-2) 1.20714E9 */
+            else if (frq == 2) return CLIGHT / FREQ3_CMP; /* B3      1.26852E9 */
+            else if (frq == 1) return CLIGHT / FREQ2_CMP; /* B2b(BDS-2) 1.20714E9 */
             else if (frq == 3) return CLIGHT / FREQ1;     /* B1 (BDS-3) 1.57542E9 */
             else if (frq == 4) return CLIGHT / FREQ5;     /* B2a(BDS-3) 1.17645E9 */
             else if (frq == 5) return CLIGHT / FREQ2_CMP; /* B2b(BDS-3) 1.20714E9 */

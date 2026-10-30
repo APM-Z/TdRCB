@@ -1,4 +1,4 @@
-#include "MRCB.h"
+#include "TdRCB.h"
 /* constants/macros ----------------------------------------------------------*/
 #define NUMSYS      8                   /* number of systems */
 #define MAXRNXLEN   (16*MAXOBSTYPE+4)   /* max rinex record length */
@@ -778,7 +778,7 @@ static int set_sysmask(const char *opt)
 
 static void set_freq(sigind_t* ind, const prcopt_t* popt,int sys,int i,double ver) 
 {
-    if (popt->bds2 == 0 || popt->bds2 == 2) {
+    if (popt->usebds == 0 || popt->usebds == 2) { /* f1=B1I, f2=B3I */
         if (sys == SYS_CMP) {
             if (ind->frq[i] == 2) ind->frq[i] = 1; /* B1-2       */
             else if (ind->frq[i] == 7) ind->frq[i] = 3; /* B2b(BDS-3)         */
@@ -793,11 +793,11 @@ static void set_freq(sigind_t* ind, const prcopt_t* popt,int sys,int i,double ve
             else if (ind->frq[i] == 6) ind->frq[i] = 5; /* E5      */
         }
     }
-    else if (popt->bds2 == 1) {
+    else if (popt->usebds == 1) {
         if (sys == SYS_CMP) {
             if (ind->frq[i] == 2) ind->frq[i] = 1; /* B1-2       */
-            else if (ind->frq[i] == 5) ind->frq[i] = 3; /* B2b(BDS-2)       */
-            else if (ind->frq[i] == 4) ind->frq[i] = 2; /* B3 */
+            else if (ind->frq[i] == 5) ind->frq[i] = 2; /* B2b(BDS-2)       */
+            else if (ind->frq[i] == 4) ind->frq[i] = 3; /* B3 */
             else if (ind->frq[i] == 3) ind->frq[i] = 5; /* B2a(BDS-3) */
             else if (ind->frq[i] == 7) ind->frq[i] = 6; /* B2b(BDS-3) */
             else if (ind->frq[i] == 1 && ver != 3.02) ind->frq[i] = 4; /* B1 (BDS-3) */

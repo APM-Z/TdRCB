@@ -1,5 +1,5 @@
-#ifndef MRCB_H
-#define MRCB_H
+#ifndef TdRCB_H
+#define TdRCB_H
 #include <ctype.h>
 #include <errno.h>
 #include <math.h>
@@ -32,7 +32,7 @@
 #define D2R         (PI/180.0)          /* deg to rad */
 #define M2R         (PI/(60.0*180.0))   /* min to rad */
 #define R2D         (180.0/PI)          /* rad to deg */
-#define S2NS        1E9                 /* s ±ä³É ns */
+#define S2NS        1E9                 /* s ï¿½ï¿½?ns */
 #define CLIGHT      299792458.0         /* speed of light (m/s) */
 #define SC2RAD      3.1415926535898     /* semi-circle to radian (IS-GPS) */
 #define AU          149597870691.0      /* 1 AU (m) */
@@ -343,9 +343,6 @@
 #define SOLQ_MONO    16                 /* solution status: monocular camera pose for pose measurement */
 #define SOLQ_STEREO  17                 /* solution status: stereo camera pose for pose measurement */
 #define MAXSOLQ      17                 /* max number of solution status */
-
-#define SOLTYPE_FORWARD  0              /* solution type: forward */
-#define SOLTYPE_BACKWARD 1              /* solution type: backward */
 
 #define TIMES_GPST  0                   /* time system: gps time */
 #define TIMES_UTC   1                   /* time system: utc */
@@ -777,11 +774,10 @@ typedef struct {           /* processing options type */
     double antdel[MAXRCV][3];    /* antenna delta {e,n,u} */
     snrmask_t snrmask;           /* SNR mask */
     int nf;                      /* number of frequencies*/
-    int soltype;                 /* solution type (0:forward) */
     int CONTINUE;                /* continue day process */
     char staname[5];             /* Station Name */
     //char AntType[21];            /* Antenna Type */
-    int bds2;                    /* use bds2? */
+    int usebds;                  /* BDS mode: 0 BDS-3, 1 BDS-2, 2 BDS-2+BDS-3 (f1/f2=B1I/B3I) */
     char DOY[10];                /* DOY date */
 } prcopt_t;
 
@@ -850,10 +846,22 @@ typedef struct {
     char obs[MAXSTRPATH];     /* input obs file */
     char NavDir[MAXSTRPATH];       /* Batch nav file dir */
     char ObsDir[MAXSTRPATH];       /* Batch obs file dir */
-    char outFile_PRO[MAXSTRPATH]; /*STAT PATH*/
-    char outFile_OUT[MAXSTRPATH];  /*OUT  PATH*/
-    char outFile_LOG[MAXSTRPATH];  /*OUT  PATH*/
+    char outFile_PRO[MAXSTRPATH]; /* OUT_PRO: .pro */
+    char outFile_OUT[MAXSTRPATH]; /* OUT_PATH: .out / .tfit / .tres */
+    char outFile_LOG[MAXSTRPATH]; /* OUT_LOG: .log */
+    char temp[MAXSTRPATH];    /* optional temperature file */
 } filopt_t;
+
+#define TEMP_DT      30.0                 /* temperature sampling interval (s) */
+#define TEMP_NEPOCH  2880                 /* 24 h at 30 s */
+
+typedef struct {                          /* 24 h temperature series */
+    gtime_t time[TEMP_NEPOCH];
+    double  val[TEMP_NEPOCH];
+    unsigned char ok[TEMP_NEPOCH];        /* 0:empty 1:measured 2:interpolated */
+    int n;                                /* TEMP_NEPOCH when the file is 24 h */
+    int nfill;                            /* number of interpolated epochs */
+} temp_t;
 
 typedef struct {
     unsigned char sys;  /* navigation system */
@@ -887,6 +895,8 @@ typedef struct {            /* control/result type */
     int nfix;               /* number of continuous fixes of ambiguity */
 	double tt;              /* time difference between current and previous (s) */
     double TqLOM;
+    double temp;            /* temperature at current epoch (deg C) */
+    int    tempok;          /* 1: epoch temperature is available */
     sol_t  sol;                 /*  solution */
     ssat_t ssat[MAXRCV*MAXSAT]; /* satellite status */
     prcopt_t opt;               /* processing options */
@@ -1060,6 +1070,7 @@ extern int initIfile(Ifile *ifile);
 extern int freeIfile(Ifile *ifile);
 extern int getpath(Ifile *ifile,prcopt_t*opt, filopt_t filopt);
 extern int postpos(prcopt_t *popt, const solopt_t *sopt, filopt_t filopt);
+extern int readtemp(const char *file, temp_t *temp);
 extern char *time_str(gtime_t t, int n);
 
 /*extend functions*/
