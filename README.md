@@ -1,7 +1,7 @@
 # Download Complete Dataset
 Due to large files being managed by Git LFS, please use the following command to obtain the complete data:
 ```bash
-git clone https://github.com/APM-Z/MRCB.git
+git clone https://github.com/APM-Z/TdRCB.git
 ```
 Alternatively, you can download individual data files directly from the Testdata/ folder in the repository.
 
