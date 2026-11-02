@@ -3,9 +3,9 @@
 !include/
 !script/
 !src/
+!result/
 !Testdata/
 !Testdata/day-by-day processing/
 !Testdata/continuous processing/
 !Testdata/continuous processing/nav/
 !Testdata/continuous processing/obs/
-result/
